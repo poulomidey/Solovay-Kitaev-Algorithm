@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from itertools import product
 # import cirq_google as cirq
 
 # print(np.asarray([1,2,3]))
@@ -16,7 +17,17 @@ gateset = {"H": (1/math.sqrt(2)) * np.matrix([[1, 1], [1, -1]]), "T": np.matrix(
 
 #global parameters
 length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
+epsilon_naught = 0.14
 
+def generate_permutations(choices, length):
+    for p in product(choices, length):
+        yield ''.join(p)
+
+def calculate_matrix(gate_order):
+    curr = np.identity(2)
+    for char in gate_order[::-1]:
+        curr = gateset[char] @ curr
+    return curr
 
 def distance(A, B):
     # return np.linalg.norm(A-B) #Frobenius norm
@@ -30,7 +41,26 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    return X
+    lengths = [4, 8, 12, 16]
+    min_error = 10**10 # big value
+    min_mtx = np.identity(2)
+    min_gate_order = ""
+
+    for l in lengths:
+        for perm in generate_permutations(gateset.keys(), l):
+            mtx = calculate_matrix(perm)
+            error = distance (X, mtx)
+            if error < epsilon_naught:
+                min_error = error
+                min_mtx = mtx
+                min_gate_order = perm
+                break
+            elif error < min_error:
+                min_error = error
+                min_mtx = mtx
+                min_gate_order = perm
+                
+    return min_mtx, min_gate_order
 
 def gc_decompose(X):
     # pass
@@ -51,5 +81,7 @@ def solovay_kitaev(U, n):
         
         return U_n
     
+#TODO: graphing
+
 U = np.matrix([[0,1],[1,0]])
 print(solovay_kitaev(U, 3))
