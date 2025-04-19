@@ -12,7 +12,7 @@ from itertools import product
 #TODO: where do we pass in gate sets?
 # Gateset passed as list of matrices
 
-gateset = {"H": (1/math.sqrt(2)) * np.matrix([[1, 1], [1, -1]]), "T": np.matrix([[1, 0], [0, np.exp(np.complex(0, 1) * np.pi * 0.25)]])}
+gateset = {"H": (1/math.sqrt(2)) * np.matrix([[1, 1], [1, -1]]), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
 # print(gateset)
 
 #global parameters
@@ -20,7 +20,9 @@ length = 16 # max length of word for basic approx. TODO: do we want to incl. str
 epsilon_naught = 0.14
 
 def generate_permutations(choices, length):
-    for p in product(choices, length):
+    #for p in product(*([[choices]]*length)):
+    for p in product(choices, repeat=length):
+        print(p)
         yield ''.join(p)
 
 def calculate_matrix(gate_order):
@@ -47,19 +49,20 @@ def basic_approx_to_U(X):
     min_gate_order = ""
 
     for l in lengths:
-        for perm in generate_permutations(gateset.keys(), l):
+        for perm in generate_permutations([*gateset.keys()], l):
             mtx = calculate_matrix(perm)
             error = distance (X, mtx)
             if error < epsilon_naught:
                 min_error = error
                 min_mtx = mtx
                 min_gate_order = perm
-                break
+                return min_mtx, min_gate_order
+                break # note that this is a bug; she probably meant to break out of the outer loop
             elif error < min_error:
                 min_error = error
                 min_mtx = mtx
                 min_gate_order = perm
-                
+
     return min_mtx, min_gate_order
 
 def gc_decompose(X):
