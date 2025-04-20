@@ -3,6 +3,9 @@ import math
 from itertools import product
 from pprint import pprint
 import sympy
+
+ppprint = print
+print = lambda *x: None
 # import cirq_google as cirq
 
 # print(np.asarray([1,2,3]))
@@ -14,7 +17,7 @@ import sympy
 #TODO: where do we pass in gate sets?
 # Gateset passed as list of matrices
 
-gateset = {"H": (1/math.sqrt(2)) * np.matrix([[1, 1], [1, -1]]), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
+gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
 gateset["T_dagger"] = gateset["T"].H
 pprint(gateset)
 
@@ -25,9 +28,7 @@ epsilon_naught = 0.14
 def generate_permutations(choices, length):
     #for p in product(*([[choices]]*length)):
     for p in product(choices, repeat=length):
-        print(p)
         yield p
-        # yield ''.join(p)
 
 def calculate_matrix(gate_order):
     curr = np.identity(2)
@@ -47,7 +48,7 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    lengths = [1, 4, 8, 12, 16]
+    lengths = [1, 4, 8, 12, 16][:4] #TODO improve
     min_error = 10**10 # big value
     min_mtx = np.identity(2)
     min_gate_order = ""
@@ -80,6 +81,7 @@ def gc_decompose(X):
     except Exception as e:
         print(f"Error solving for angle: {e}")
         angle = 0
+    ppprint(f"{angle=}")
 
 
     print(f"theta: {theta}, phi: {angle}")
@@ -88,7 +90,8 @@ def gc_decompose(X):
     # and W to be a rotation by an angle phi about the Y axis of the Bloch sphere
 
     # Rz = np.eye(2)
-    Rz = gateset["H"] @ gateset["H"]
+    Rz = gateset["H"] @ gateset["H"] # just constructing eye
+    # TODO arbitrary angle, not k * pi/4
     if theta > 0:
         for i in range(int(np.round(theta / (np.pi/4),0))):
             Rz @= gateset["T"]
@@ -96,6 +99,7 @@ def gc_decompose(X):
         for i in range(int(np.round(-theta / (np.pi/4),0))):
             Rz @= gateset["T_dagger"]
 
+    # TODO arbitrary gateset
     V = gateset["H"]
     V @= Rz
     V @= gateset["H"]
@@ -124,9 +128,20 @@ def solovay_kitaev(U, n):
 #TODO: graphing
 
 U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
-answer = solovay_kitaev(U, 3)
+U = np.matrix(np.asarray([[.24, .13],[.82, .74]]/np.linalg.norm([[.24, .13],[.82, .74]]), dtype=complex)) 
+answer = solovay_kitaev(U, 4)
 print(answer)
 print("Want to minimize:", np.round(distance(answer, U), 12))
+# We would like epsilon_n 
+# He said just graph epsilon_n (distance) dependent vs n independent axes
 
+exit()
 
 # save for different values of n, matplot the decrease of error with n increasing
+import matplotlib.pyplot as plt
+x = range(1, 5)
+y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 5)]
+print(input('yo'))
+plt.plot(x, y)
+plt.show()
+plt.savefig("sk_error.png")
