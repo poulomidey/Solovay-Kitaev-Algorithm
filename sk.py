@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from itertools import product
+from pprint import pprint
 # import cirq_google as cirq
 
 # print(np.asarray([1,2,3]))
@@ -13,7 +14,8 @@ from itertools import product
 # Gateset passed as list of matrices
 
 gateset = {"H": (1/math.sqrt(2)) * np.matrix([[1, 1], [1, -1]]), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
-# print(gateset)
+gateset["T_dagger"] = gateset["T"].H
+pprint(gateset)
 
 #global parameters
 length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
@@ -23,7 +25,8 @@ def generate_permutations(choices, length):
     #for p in product(*([[choices]]*length)):
     for p in product(choices, repeat=length):
         print(p)
-        yield ''.join(p)
+        yield p
+        # yield ''.join(p)
 
 def calculate_matrix(gate_order):
     curr = np.identity(2)
@@ -43,7 +46,7 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    lengths = [4, 8, 12, 16]
+    lengths = [1, 4, 8, 12, 16]
     min_error = 10**10 # big value
     min_mtx = np.identity(2)
     min_gate_order = ""
@@ -52,17 +55,14 @@ def basic_approx_to_U(X):
         for perm in generate_permutations([*gateset.keys()], l):
             mtx = calculate_matrix(perm)
             error = distance (X, mtx)
-            if error < epsilon_naught:
-                # we're here, so we can stop searching
+            if error < min_error:
                 min_error = error
                 min_mtx = mtx
                 min_gate_order = perm
+            if error < epsilon_naught:
+                # We're done
                 print(f"Found a good approximation with gates {min_gate_order} and error {min_error}")
                 return min_mtx
-            elif error < min_error:
-                min_error = error
-                min_mtx = mtx
-                min_gate_order = perm
 
     print(f"Found a bad approximation with gates {min_gate_order} and error {min_error}")
     return min_mtx
@@ -76,7 +76,7 @@ def solovay_kitaev(U, n):
         return basic_approx_to_U(U) 
     else:
         U_n_m_1 = solovay_kitaev(U, n-1)
-        V, W = gc_decompose(U @ U.H)
+        V, W = gc_decompose(U @ U_n_m_1.H)
         V_n_m_1 = solovay_kitaev(V, n-1)
         W_n_m_1 = solovay_kitaev(W, n-1)
         # basic approx and solovay kitaev return string of gates. 
