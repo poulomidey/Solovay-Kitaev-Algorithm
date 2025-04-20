@@ -2,6 +2,7 @@ import numpy as np
 import math
 from itertools import product
 from pprint import pprint
+import sympy
 # import cirq_google as cirq
 
 # print(np.asarray([1,2,3]))
@@ -68,8 +69,42 @@ def basic_approx_to_U(X):
     return min_mtx
 
 def gc_decompose(X):
-    # pass
-    return X, X
+    # Some inspiration from https://github.com/qcc4cp/qcc/blob/main/src/solovay_kitaev.py
+    # Mostly section 4.1 of https://arxiv.org/pdf/quant-ph/0505030
+    
+    theta = np.real(np.arccos(X[0,0]+X[1,1])/2)
+    phi = sympy.Symbol('phi')
+    angle = sympy.solvers.solve(  ((sympy.sin(theta/2)) - (2*sympy.sin(phi/2)**2 * sympy.sqrt(1-sympy.sin(phi/2)**4)))  , phi)
+    try:
+        angle = angle[0].evalf() # Just pick the first solution
+    except Exception as e:
+        print(f"Error solving for angle: {e}")
+        angle = 0
+
+
+    print(f"theta: {theta}, phi: {angle}")
+
+    # Construct V to be a rotation by an angle phi about the X axis of the Bloch sphere,
+    # and W to be a rotation by an angle phi about the Y axis of the Bloch sphere
+
+    # Rz = np.eye(2)
+    Rz = gateset["H"] @ gateset["H"]
+    if theta > 0:
+        for i in range(int(np.round(theta / (np.pi/4),0))):
+            Rz @= gateset["T"]
+    elif theta < 0:
+        for i in range(int(np.round(-theta / (np.pi/4),0))):
+            Rz @= gateset["T_dagger"]
+
+    V = gateset["H"]
+    V @= Rz
+    V @= gateset["H"]
+
+    W = gateset["T_dagger"] @ gateset["T_dagger"] @ gateset["H"]
+    W @= Rz
+    W @= gateset["H"] @ gateset["T"] @ gateset["T"]
+
+    return V, W
 
 def solovay_kitaev(U, n):
     if (n==0):
@@ -89,4 +124,9 @@ def solovay_kitaev(U, n):
 #TODO: graphing
 
 U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
-print(solovay_kitaev(U, 3))
+answer = solovay_kitaev(U, 3)
+print(answer)
+print("Want to minimize:", np.round(distance(answer, U), 12))
+
+
+# save for different values of n, matplot the decrease of error with n increasing
