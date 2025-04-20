@@ -53,17 +53,19 @@ def basic_approx_to_U(X):
             mtx = calculate_matrix(perm)
             error = distance (X, mtx)
             if error < epsilon_naught:
+                # we're here, so we can stop searching
                 min_error = error
                 min_mtx = mtx
                 min_gate_order = perm
-                return min_mtx, min_gate_order
-                break # note that this is a bug; she probably meant to break out of the outer loop
+                print(f"Found a good approximation with gates {min_gate_order} and error {min_error}")
+                return min_mtx
             elif error < min_error:
                 min_error = error
                 min_mtx = mtx
                 min_gate_order = perm
 
-    return min_mtx, min_gate_order
+    print(f"Found a bad approximation with gates {min_gate_order} and error {min_error}")
+    return min_mtx
 
 def gc_decompose(X):
     # pass
@@ -86,5 +88,5 @@ def solovay_kitaev(U, n):
     
 #TODO: graphing
 
-U = np.matrix([[0,1],[1,0]])
+U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
 print(solovay_kitaev(U, 3))
