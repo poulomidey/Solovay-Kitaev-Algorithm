@@ -4,6 +4,7 @@ from itertools import product
 from pprint import pprint
 import sympy
 from tqdm import tqdm
+import pickle
 
 ppprint = print
 # print = lambda *x: None
@@ -26,11 +27,13 @@ pprint(gateset)
 length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
 epsilon_naught = 0.14
 
+MAX_LEN = length
+
 # Don't worry, we're not actually using these matrices
 X = np.matrix(np.array([[0, 1], [1, 0]], dtype=complex))
 Y = np.matrix(np.array([[0, -complex(0,1)], [complex(0,1), 0]], dtype=complex))
-Rx = lambda angle: np.exp(complex(0,1) * angle/2 * X)
-Ry = lambda angle: np.exp(complex(0,1) * angle/2 * Y)
+Rx = lambda angle: np.exp(complex(0,1) * angle * X)
+Ry = lambda angle: np.exp(complex(0,1) * angle * Y)
 print(X,Y,Rx(np.pi/4),Ry(np.pi/4),sep="\n\n")
 # exit()
 
@@ -57,7 +60,7 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    lengths = [1, 4, 8, 12, 16][:4]
+    lengths = ([1] + [*range(4,MAX_LEN+1,4)])
     min_error = 10**10 # big value
     min_mtx = np.identity(2)
     min_gate_order = ""
@@ -74,6 +77,41 @@ def basic_approx_to_U(X):
                 # We're done
                 print(f"Found a good approximation with gates {min_gate_order} and error {min_error}")
                 return min_mtx
+
+    print(f"Found a bad approximation with gates {min_gate_order} and error {min_error}")
+    return min_mtx
+
+def pull_from_cache():
+    try:
+        cache = pickle.loads(open("cache.pickle", "rb").read())
+    except FileNotFoundError:
+        cache = {}
+    key = (tuple(gateset.keys()), length)
+    if key not in cache:
+        cache[key]=[(i, calculate_matrix(i)) for i in tqdm(generate_permutations(gateset, length), total=math.pow(len(gateset), length))]
+        with open("cache.pickle", "wb") as f:
+            pickle.dump(gateset, f)
+    return cache[key]
+
+def new_generate_permutations(choices, length):
+    for perm, mtx in pull_from_cache():
+        yield perm, mtx
+
+def new_basic_approx_to_U(U):
+    min_error = 10**10 # big value
+    min_mtx = np.identity(2)
+    min_gate_order = ""
+
+    for perm, mtx in new_generate_permutations(tuple(gateset.keys()), length):
+        error = distance(U, mtx)
+        if error < min_error:
+            min_error = error
+            min_mtx = mtx
+            min_gate_order = perm
+        if error < epsilon_naught:
+            # We're done
+            print(f"Found a good approximation with gates {min_gate_order} and error {min_error}")
+            return min_mtx
 
     print(f"Found a bad approximation with gates {min_gate_order} and error {min_error}")
     return min_mtx
@@ -121,14 +159,44 @@ def gc_decompose(X):
     """
 
     ### Get Rx, Ry by basic approximation
-    V = basic_approx_to_U(Rx(angle))
-    W = basic_approx_to_U(Ry(angle))
+    # V = basic_approx_to_U(Rx(angle))
+    # W = basic_approx_to_U(Ry(angle))
+
+    # Cheat for now
+    V = Rx(angle)
+    W = Ry(angle)
 
     return V, W
 
+    # "Take the log of the unitary" - (eq ~25)
+    # H is the log of U, in 24.
+    # F, G are the matrix log of V,W
+    # U = exp(-iH)
+    # scipi.linalg.logm
+
+# Page 11-12
+def new_gc_decompose(U):
+    H = scipy.linalg.logm(U)
+    # W_jk = fourier matrix (hadamard for single qubit)
+    # F is 
+    # In this basis, diagonal elements of H vanish
+    # Assume G diagonal with real entries. then iH_jk = F_jk(G_kk-G_jj) 
+    # So F_jk = iH_jk (we have this) over G_kk-G_jj) along non-diagonal, 0 on diag.
+
+    # Input U, output V, W
+    # H = scipy.linalg.logm(U) (if exp(-iH)=U, otherwise somethign like that)
+    # H = Wdiag(E1,E2)W^\dagger
+    # G = diag(-(2-1)/2, -(2-1)/2+1, ..., (2-1)/2
+    # 
+    # return matrix exponential V=exp(-iF), W=exp(-iG)
+
+    # write unit tests for this function, assuming F and G for output and make sure the [F,G] = iH as a test
+    # then move on to returning the V,W matrices and ensure that VWV\daggerW\dagger ~= U
+
+
 def solovay_kitaev(U, n):
     if (n==0):
-        return basic_approx_to_U(U) 
+        return new_basic_approx_to_U(U) 
     else:
         U_n_m_1 = solovay_kitaev(U, n-1)
         V, W = gc_decompose(U @ U_n_m_1.H)
@@ -162,3 +230,4 @@ plt.plot(x, y)
 plt.show()
 plt.savefig("error_plot.png")
 
+# In the plot, we want the error to be taken to the power of 3/2 each time
