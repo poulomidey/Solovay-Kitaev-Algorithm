@@ -2,6 +2,7 @@ import numpy as np
 import math
 from itertools import product
 from pprint import pprint
+import scipy.linalg
 import sympy
 from tqdm import tqdm
 import pickle
@@ -22,7 +23,7 @@ ppprint = print
 # Gateset passed as list of matrices
 
 # NOTE: Cache is invalidated if you change the definition of a gate within this gateset without modifying any gate names.
-gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
+gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]], dtype='complex')}
 gateset["T_dagger"] = gateset["T"].H
 pprint(gateset)
 
@@ -31,7 +32,7 @@ length = 16 # max length of word for basic approx. TODO: do we want to incl. str
 epsilon_naught = 0.14
 
 # decrease length and scale accuracy appropriately
-length = 10
+length = 11
 epsilon_naught = pow(epsilon_naught, 1/(1.5**(16-length)))
 
 MAX_LEN = length
@@ -50,7 +51,7 @@ def generate_permutations(choices, length):
         yield p
 
 def calculate_matrix(gate_order):
-    curr = np.identity(2)
+    curr = np.matrix(np.identity(2), dtype='complex')
     for char in gate_order[::-1]:
         curr = gateset[char] @ curr
     return curr
@@ -67,13 +68,15 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    lengths = ([1] + [*range(4,MAX_LEN+1,4)])
+
+    # lengths = ([1] + [*range(4,MAX_LEN+1,4)])
+    lengths = range(MAX_LEN+1)
     min_error = 10**10 # big value
     min_mtx = np.identity(2)
     min_gate_order = ""
 
     for l in lengths:
-        for perm in tqdm(generate_permutations([*gateset.keys()], l)):
+        for perm in tqdm(generate_permutations([*gateset.keys()], l),total=pow(len(gateset), l), desc=f"Generating permutations of length {l}"):
             mtx = calculate_matrix(perm)
             error = distance (X, mtx)
             if error < min_error:
@@ -185,24 +188,27 @@ def gc_decompose(X):
 
 # Page 11-12
 def new_gc_decompose(U):
-    H = np.matrix(np.log(U)/-complex(0,1))
-    print("e^{-iH}, U", np.exp(-complex(0,1) * H), U)
-    G = np.matrix(np.diag((-1/2, 1/2)))
+    # H = np.matrix(np.log(U)/-complex(0,1))
+    U0 = U/np.sqrt(np.linalg.det(U))
+    H  = -1j * scipy.linalg.logm(U0)
 
-    F = np.matrix(np.zeros((2,2)))
+    print("e^{-iH}, U", np.exp(-complex(0,1) * H), U)
+    G = np.matrix(np.diag((-1/2, 1/2)), dtype='complex')
+
+    F = np.matrix(np.zeros((2,2), dtype='complex'))
     for j in range(2):
         for k in range(2):
             if j != k:
-                F[j,k] = -1j * H[j,k] / (G[k,k] - G[j,j])
+                F[j,k] = -complex(0,1) * H[j,k] / (G[k,k] - G[j,j])
             else:
                 F[j,k] = 0
 
     print("[F,G], iH:", F@G-G@F, complex(0,1)*H)
     
-    V = np.exp(-complex(0,1) * F)
-    W = np.exp(-complex(0,1) * G)
+    V = np.exp(complex(0,1) * F)
+    W = np.exp(complex(0,1) * G)
 
-    print("VWVW Distance:", distance(V@W@W.H@V.H, U))
+    print("VWVW Distance:", distance(V@W@V.H@W.H, U))
 
     return V, W
 
@@ -251,7 +257,7 @@ print("Want to minimize:", np.round(distance(answer, U), 12))
 # We would like epsilon_n 
 # He said just graph epsilon_n (distance) dependent vs n independent axes
 
-# exit()
+exit()
 
 # save for different values of n, matplot the decrease of error with n increasing
 import matplotlib.pyplot as plt
