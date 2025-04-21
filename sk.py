@@ -5,6 +5,7 @@ from pprint import pprint
 import sympy
 from tqdm import tqdm
 import pickle
+import logging
 
 ppprint = print
 # print = lambda *x: None
@@ -19,6 +20,7 @@ ppprint = print
 #TODO: where do we pass in gate sets?
 # Gateset passed as list of matrices
 
+# NOTE: Cache is invalidated if you change the definition of a gate within this gateset without modifying any gate names.
 gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]])}
 gateset["T_dagger"] = gateset["T"].H
 pprint(gateset)
@@ -81,21 +83,23 @@ def basic_approx_to_U(X):
     print(f"Found a bad approximation with gates {min_gate_order} and error {min_error}")
     return min_mtx
 
-def pull_from_cache():
+def pull_from_cache(length):
     try:
-        cache = pickle.loads(open("cache.pickle", "rb").read())
+        cache = pickle.loads(open(f"cache_{length}.pickle", "rb").read())
     except FileNotFoundError:
         cache = {}
-    key = (tuple(gateset.keys()), length)
+    key = (tuple(gateset.keys()))
     if key not in cache:
         cache[key]=[(i, calculate_matrix(i)) for i in tqdm(generate_permutations(gateset, length), total=math.pow(len(gateset), length))]
-        with open("cache.pickle", "wb") as f:
+        with open(f"cache_{length}.pickle", "wb") as f:
             pickle.dump(gateset, f)
     return cache[key]
 
 def new_generate_permutations(choices, length):
-    for perm, mtx in pull_from_cache():
-        yield perm, mtx
+    for l in range(1,length+1):
+        logging.debug(f"Generating permutations of length {l}")
+        for perm, mtx in pull_from_cache(l):
+            yield perm, mtx
 
 def new_basic_approx_to_U(U):
     min_error = 10**10 # big value
