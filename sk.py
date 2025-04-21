@@ -3,9 +3,10 @@ import math
 from itertools import product
 from pprint import pprint
 import sympy
+from tqdm import tqdm
 
 ppprint = print
-print = lambda *x: None
+# print = lambda *x: None
 # import cirq_google as cirq
 
 # print(np.asarray([1,2,3]))
@@ -24,6 +25,14 @@ pprint(gateset)
 #global parameters
 length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
 epsilon_naught = 0.14
+
+# Don't worry, we're not actually using these matrices
+X = np.matrix(np.array([[0, 1], [1, 0]], dtype=complex))
+Y = np.matrix(np.array([[0, -complex(0,1)], [complex(0,1), 0]], dtype=complex))
+Rx = lambda angle: np.exp(complex(0,1) * angle/2 * X)
+Ry = lambda angle: np.exp(complex(0,1) * angle/2 * Y)
+print(X,Y,Rx(np.pi/4),Ry(np.pi/4),sep="\n\n")
+# exit()
 
 def generate_permutations(choices, length):
     #for p in product(*([[choices]]*length)):
@@ -48,13 +57,13 @@ def basic_approx_to_U(X):
     # read through a csv of all the ones we've previously generated?
     # if not within error epsilon-naught generate random strings that we haven't seen before of length length.
     # keep adding them to csv until we find one within error value.
-    lengths = [1, 4, 8, 12, 16][:4] #TODO improve
+    lengths = [1, 4, 8, 12, 16][:4]
     min_error = 10**10 # big value
     min_mtx = np.identity(2)
     min_gate_order = ""
 
     for l in lengths:
-        for perm in generate_permutations([*gateset.keys()], l):
+        for perm in tqdm(generate_permutations([*gateset.keys()], l)):
             mtx = calculate_matrix(perm)
             error = distance (X, mtx)
             if error < min_error:
@@ -73,11 +82,12 @@ def gc_decompose(X):
     # Some inspiration from https://github.com/qcc4cp/qcc/blob/main/src/solovay_kitaev.py
     # Mostly section 4.1 of https://arxiv.org/pdf/quant-ph/0505030
     
-    theta = np.real(np.arccos(X[0,0]+X[1,1])/2)
+    # Angle of rotation is arccos(trace)/2
+    theta = np.real(np.arccos((X[0,0]+X[1,1])/2))
     phi = sympy.Symbol('phi')
     angle = sympy.solvers.solve(  ((sympy.sin(theta/2)) - (2*sympy.sin(phi/2)**2 * sympy.sqrt(1-sympy.sin(phi/2)**4)))  , phi)
     try:
-        angle = angle[0].evalf() # Just pick the first solution
+        angle = float(angle[0].evalf()) # Just pick the first solution
     except Exception as e:
         print(f"Error solving for angle: {e}")
         angle = 0
@@ -89,6 +99,7 @@ def gc_decompose(X):
     # Construct V to be a rotation by an angle phi about the X axis of the Bloch sphere,
     # and W to be a rotation by an angle phi about the Y axis of the Bloch sphere
 
+    """
     # Rz = np.eye(2)
     Rz = gateset["H"] @ gateset["H"] # just constructing eye
     # TODO arbitrary angle, not k * pi/4
@@ -100,13 +111,18 @@ def gc_decompose(X):
             Rz @= gateset["T_dagger"]
 
     # TODO arbitrary gateset
-    V = gateset["H"]
-    V @= Rz
-    V @= gateset["H"]
+    Rx = gateset["H"]
+    Rx @= Rz
+    Rx @= gateset["H"]
 
-    W = gateset["T_dagger"] @ gateset["T_dagger"] @ gateset["H"]
-    W @= Rz
-    W @= gateset["H"] @ gateset["T"] @ gateset["T"]
+    Ry = gateset["T_dagger"] @ gateset["T_dagger"] @ gateset["H"]
+    Ry @= Rz
+    Ry @= gateset["H"] @ gateset["T"] @ gateset["T"]
+    """
+
+    ### Get Rx, Ry by basic approximation
+    V = basic_approx_to_U(Rx(angle))
+    W = basic_approx_to_U(Ry(angle))
 
     return V, W
 
@@ -144,4 +160,5 @@ y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 5)]
 print(input('yo'))
 plt.plot(x, y)
 plt.show()
-plt.savefig("sk_error.png")
+plt.savefig("error_plot.png")
+
