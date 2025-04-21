@@ -6,6 +6,7 @@ import sympy
 from tqdm import tqdm
 import pickle
 import logging
+import scipy
 
 ppprint = print
 # print = lambda *x: None
@@ -28,6 +29,10 @@ pprint(gateset)
 #global parameters
 length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
 epsilon_naught = 0.14
+
+# decrease length and scale accuracy appropriately
+length = 10
+epsilon_naught = pow(epsilon_naught, 1/(1.5**(16-length)))
 
 MAX_LEN = length
 
@@ -92,7 +97,7 @@ def pull_from_cache(length):
     if key not in cache:
         cache[key]=[(i, calculate_matrix(i)) for i in tqdm(generate_permutations(gateset, length), total=math.pow(len(gateset), length))]
         with open(f"cache_{length}.pickle", "wb") as f:
-            pickle.dump(gateset, f)
+            pickle.dump(cache, f)
     return cache[key]
 
 def new_generate_permutations(choices, length):
@@ -180,7 +185,30 @@ def gc_decompose(X):
 
 # Page 11-12
 def new_gc_decompose(U):
-    H = scipy.linalg.logm(U)
+    H = np.matrix(np.log(U)/-complex(0,1))
+    print("e^{-iH}, U", np.exp(-complex(0,1) * H), U)
+    G = np.matrix(np.diag((-1/2, 1/2)))
+
+    F = np.matrix(np.zeros((2,2)))
+    for j in range(2):
+        for k in range(2):
+            if j != k:
+                F[j,k] = -1j * H[j,k] / (G[k,k] - G[j,j])
+            else:
+                F[j,k] = 0
+
+    print("[F,G], iH:", F@G-G@F, complex(0,1)*H)
+    
+    V = np.exp(-complex(0,1) * F)
+    W = np.exp(-complex(0,1) * G)
+
+    print("VWVW Distance:", distance(V@W@W.H@V.H, U))
+
+    return V, W
+
+
+
+    # H = scipy.linalg.logm(U)
     # W_jk = fourier matrix (hadamard for single qubit)
     # F is 
     # In this basis, diagonal elements of H vanish
@@ -200,10 +228,10 @@ def new_gc_decompose(U):
 
 def solovay_kitaev(U, n):
     if (n==0):
-        return new_basic_approx_to_U(U) 
+        return basic_approx_to_U(U) 
     else:
         U_n_m_1 = solovay_kitaev(U, n-1)
-        V, W = gc_decompose(U @ U_n_m_1.H)
+        V, W = new_gc_decompose(U @ U_n_m_1.H)
         V_n_m_1 = solovay_kitaev(V, n-1)
         W_n_m_1 = solovay_kitaev(W, n-1)
         # basic approx and solovay kitaev return string of gates. 
@@ -216,19 +244,19 @@ def solovay_kitaev(U, n):
 #TODO: graphing
 
 U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
-U = np.matrix(np.asarray([[.24, .13],[.82, .74]]/np.linalg.norm([[.24, .13],[.82, .74]]), dtype=complex)) 
+# U = np.matrix(np.asarray([[.24, .13],[.82, .74]]/np.linalg.norm([[.24, .13],[.82, .74]]), dtype=complex)) 
 answer = solovay_kitaev(U, 4)
 print(answer)
 print("Want to minimize:", np.round(distance(answer, U), 12))
 # We would like epsilon_n 
 # He said just graph epsilon_n (distance) dependent vs n independent axes
 
-exit()
+# exit()
 
 # save for different values of n, matplot the decrease of error with n increasing
 import matplotlib.pyplot as plt
-x = range(1, 5)
-y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 5)]
+x = range(1, 12)
+y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 12)]
 print(input('yo'))
 plt.plot(x, y)
 plt.show()
