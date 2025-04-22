@@ -9,41 +9,42 @@ import pickle
 import logging
 import scipy
 
-ppprint = print
-# print = lambda *x: None
-# import cirq_google as cirq
+if __name__ == "__main__":
+    ppprint = print
+    # print = lambda *x: None
+    # import cirq_google as cirq
 
-# print(np.asarray([1,2,3]))
-# print(cirq.Sycamore)
+    # print(np.asarray([1,2,3]))
+    # print(cirq.Sycamore)
 
-# U_n_m_1 = np.zeros((2,2))
-# print(U_n_m_1)
+    # U_n_m_1 = np.zeros((2,2))
+    # print(U_n_m_1)
 
-#TODO: where do we pass in gate sets?
-# Gateset passed as list of matrices
+    #TODO: where do we pass in gate sets?
+    # Gateset passed as list of matrices
 
-# NOTE: Cache is invalidated if you change the definition of a gate within this gateset without modifying any gate names.
-gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]], dtype='complex')}
-gateset["T_dagger"] = gateset["T"].H
-pprint(gateset)
+    # NOTE: Cache is invalidated if you change the definition of a gate within this gateset without modifying any gate names.
+    gateset = {"H": (1/math.sqrt(2)) * np.matrix(np.asarray([[1, 1], [1, -1]], dtype='complex')), "T": np.matrix([[1, 0], [0, np.exp(complex(0, 1) * np.pi * 0.25)]], dtype='complex')}
+    gateset["T_dagger"] = gateset["T"].H
+    pprint(gateset)
 
-#global parameters
-length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
-epsilon_naught = 0.14
+    #global parameters
+    length = 16 # max length of word for basic approx. TODO: do we want to incl. strings of less length?
+    epsilon_naught = 0.14
 
-# decrease length and scale accuracy appropriately
-length = 10
-epsilon_naught = pow(epsilon_naught, 1/(1.5**(16-length)))
+    # decrease length and scale accuracy appropriately
+    length = 10
+    epsilon_naught = pow(epsilon_naught, 1/(1.5**(16-length)))
 
-MAX_LEN = length
+    MAX_LEN = length
 
-# Don't worry, we're not actually using these matrices
-X = np.matrix(np.array([[0, 1], [1, 0]], dtype=complex))
-Y = np.matrix(np.array([[0, -complex(0,1)], [complex(0,1), 0]], dtype=complex))
-Rx = lambda angle: np.exp(complex(0,1) * angle * X)
-Ry = lambda angle: np.exp(complex(0,1) * angle * Y)
-print(X,Y,Rx(np.pi/4),Ry(np.pi/4),sep="\n\n")
-# exit()
+    # Don't worry, we're not actually using these matrices
+    X = np.matrix(np.array([[0, 1], [1, 0]], dtype=complex))
+    Y = np.matrix(np.array([[0, -complex(0,1)], [complex(0,1), 0]], dtype=complex))
+    Rx = lambda angle: np.exp(complex(0,1) * angle * X)
+    Ry = lambda angle: np.exp(complex(0,1) * angle * Y)
+    print(X,Y,Rx(np.pi/4),Ry(np.pi/4),sep="\n\n")
+    # exit()
 
 def generate_permutations(choices, length):
     #for p in product(*([[choices]]*length)):
