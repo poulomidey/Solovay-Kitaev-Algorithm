@@ -91,56 +91,45 @@ def _remove_inverse_follows_gate(sequence):
             # next index
             index += 1
 
-def my_g(U, n, basic_approx_depth = 10, gateset=["h", "t", "tdg"]):
-    gate_matrix = U
-    recursion_degree = n
-
-    basic_approximations = None
-    if basic_approximations is None:
+# Keep cache of basic approximations
+cache = None
+def my_g(U, n, length = 10, gateset=["h", "t", "tdg"]):
+    global cache
+    
+    if cache is None:
         # generate a default basic approximation
-        basic_approximations = generate_basic_approximations(
-            basis_gates=gateset, depth=basic_approx_depth
-        )
-
-    basic_approximations = SolovayKitaevDecomposition.load_basic_approximations(basic_approximations)
+        cache = generate_basic_approximations(basis_gates=gateset, depth=length)
 
     # make input matrix SU(2) and get the according global phase
-    z = 1 / np.sqrt(np.linalg.det(gate_matrix))
-    gate_matrix_su2 = GateSequence.from_matrix(z * gate_matrix)
-    global_phase = np.arctan2(np.imag(z), np.real(z))
+    gate_matrix_su2 = GateSequence.from_matrix((1 / np.sqrt(np.linalg.det(U))) * U)
 
     # get the decomposition as GateSequence type
-    decomposition = _recurse(basic_approximations, gate_matrix_su2, recursion_degree, check_input=True)
+    decomposition = _recurse(cache, gate_matrix_su2, n, check_input=True)
 
     # simplify
     _remove_identities(decomposition)
     _remove_inverse_follows_gate(decomposition)
 
+    # print(f'{decomposition = }')
+
     # convert to a circuit and attach the right phases
     out = decomposition.to_circuit()
-    out.global_phase = decomposition.global_phase - global_phase
 
     return out
 
 def my_f(U, n, basic_approx_depth = 10):
-    U_gate = UnitaryGate(U)
-
-    circuit = QuantumCircuit(1)
-    circuit.append(U_gate, [0])
-
-    # print(f'{U = } {U.shape = } {U.dtype = } {U[0] = }, {U[0][1] = }')
 
     # Apply my Solovay-Kitaev decomposition
-    circ = my_g(np.array(U, dtype='complex'), n, basic_approx_depth)
+    circ = my_g(np.array(U, dtype='complex'), n, basic_approx_depth, gateset=["h", "t"])
 
     # Print the resulting circuit
-    print(circ)
+    # print(f'{circ = }')
 
     matrices = [np.matrix(Operator(x.operation).data,dtype='complex') for x in circ.data]
-    print(matrices)
+    # print(f'{matrices = }')
     mul = reduce(np.matmul, matrices, np.matrix(np.eye(2, dtype=complex)))
-    print(mul)
-    print(distance(U, mul))
+    # print(f'{mul = }')
+    print(f'{n = } {distance(U, mul) = }')
     return distance(U, mul)
 
 
@@ -154,7 +143,7 @@ U = U@U@U@X@U@X@U@U@X@U@X@U@U@U
 
 print(f'{ U@U@U@X@U@X@U@U@X@U@X@U@U@U = }')
 
-x = range(6)
+x = range(6+1)
 plt.plot(x, [my_f(U, i) for i in x])
 plt.xlabel('n')
 plt.ylabel('Error')
