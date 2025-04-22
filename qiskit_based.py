@@ -36,7 +36,10 @@ X = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
 theta = np.pi/263
 U = scipy.linalg.expm(-complex(0,1)*theta/2*np.matrix(np.asarray([[1,0],[0,-1]], dtype=complex)))
 
-x = range(3)
+# Just try to make it hard to approximate, to show improvement as n increases
+U = U@U@U@X@U@X@U@U@X@U@X@U@U@U
+
+x = range(6)
 plt.plot(x, [f(U, i) for i in x])
 plt.xlabel('n')
 plt.ylabel('Error')

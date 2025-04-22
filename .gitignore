@@ -1,3 +1,6 @@
+# Unsafe cache; loading arbitary pickles leads to RCE. Please be careful.
+*.pickle
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

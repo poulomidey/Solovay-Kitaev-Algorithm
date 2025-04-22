@@ -32,7 +32,7 @@ length = 16 # max length of word for basic approx. TODO: do we want to incl. str
 epsilon_naught = 0.14
 
 # decrease length and scale accuracy appropriately
-length = 11
+length = 10
 epsilon_naught = pow(epsilon_naught, 1/(1.5**(16-length)))
 
 MAX_LEN = length
@@ -231,13 +231,53 @@ def new_gc_decompose(U):
     # write unit tests for this function, assuming F and G for output and make sure the [F,G] = iH as a test
     # then move on to returning the V,W matrices and ensure that VWV\daggerW\dagger ~= U
 
+# From OpenAI Deep Research - Doesn't work, but worth a shot
+def ai_gc_decompose(delta):
+    def remove_global_phase(U):
+        d = U.shape[0]
+        det = np.linalg.det(U)
+        return U / det**(1/d)
+    
+    def compute_H_from_delta(delta):
+        delta = remove_global_phase(delta)
+        M = scipy.linalg.logm(delta)
+        H = (M / (1j))
+        H = (H + H.conj().T) / 2
+        d = H.shape[0]
+        H -= np.trace(H) / d * np.eye(d)
+        return H
+    
+
+    def hermitian_commutator_decomposition(H):
+        d = H.shape[0]
+        g = np.arange(d) - (d - 1) / 2
+        G = np.diag(g)
+        F = np.zeros_like(H, dtype=complex)
+        for j in range(d):
+            for k in range(d):
+                if j != k:
+                    F[j, k] = 1j * H[j, k] / (g[k] - g[j])
+                else:
+                    F[j, j] = 0
+        F = (F + F.conj().T) / 2
+        return F, G
+
+    H = compute_H_from_delta(delta)
+    F, G = hermitian_commutator_decomposition(H)
+    V = scipy.linalg.expm(1j * F)
+    W = scipy.linalg.expm(1j * G)
+
+    print("[F,G], iH:", F@G-G@F, complex(0,1)*H)
+    print("VWVW Distance:", distance(V@W@np.matrix(V).H@np.matrix(W).H, U))
+    
+    return V, W
 
 def solovay_kitaev(U, n):
     if (n==0):
         return basic_approx_to_U(U) 
     else:
         U_n_m_1 = solovay_kitaev(U, n-1)
-        V, W = new_gc_decompose(U @ U_n_m_1.H)
+        V, W = ai_gc_decompose(U @ U_n_m_1.H)
         V_n_m_1 = solovay_kitaev(V, n-1)
         W_n_m_1 = solovay_kitaev(W, n-1)
         # basic approx and solovay kitaev return string of gates. 
@@ -248,24 +288,24 @@ def solovay_kitaev(U, n):
         return U_n
     
 #TODO: graphing
+if __name__ == "__main__":
+    U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
+    # U = np.matrix(np.asarray([[.24, .13],[.82, .74]]/np.linalg.norm([[.24, .13],[.82, .74]]), dtype=complex)) 
+    answer = solovay_kitaev(U, 4)
+    print(answer)
+    print("Want to minimize:", np.round(distance(answer, U), 12))
+    # We would like epsilon_n 
+    # He said just graph epsilon_n (distance) dependent vs n independent axes
 
-U = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
-# U = np.matrix(np.asarray([[.24, .13],[.82, .74]]/np.linalg.norm([[.24, .13],[.82, .74]]), dtype=complex)) 
-answer = solovay_kitaev(U, 4)
-print(answer)
-print("Want to minimize:", np.round(distance(answer, U), 12))
-# We would like epsilon_n 
-# He said just graph epsilon_n (distance) dependent vs n independent axes
+    exit()
 
-exit()
+    # save for different values of n, matplot the decrease of error with n increasing
+    import matplotlib.pyplot as plt
+    x = range(1, 12)
+    y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 12)]
+    print(input('yo'))
+    plt.plot(x, y)
+    plt.show()
+    plt.savefig("error_plot.png")
 
-# save for different values of n, matplot the decrease of error with n increasing
-import matplotlib.pyplot as plt
-x = range(1, 12)
-y = [np.round(distance(solovay_kitaev(U, n), U), 12) for n in range(1, 12)]
-print(input('yo'))
-plt.plot(x, y)
-plt.show()
-plt.savefig("error_plot.png")
-
-# In the plot, we want the error to be taken to the power of 3/2 each time
+    # In the plot, we want the error to be taken to the power of 3/2 each time
