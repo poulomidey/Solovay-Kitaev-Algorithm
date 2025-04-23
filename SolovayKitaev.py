@@ -350,7 +350,7 @@ def plot_error_vs_n(U, max_n=6, l=10, gateset=["h", "t"]):
     plt.xlabel('n')
     plt.ylabel('Approximation Error')
     plt.title('Decreasing Error of Solovay-Kitaev Approximation\nas Recursion Depth Increases')
-    plt.savefig(f'error_plot_l{l}_nthru{max_n}_using_{'_'.join(gateset)}.png')
+    plt.savefig(f'results/error_plot_l{l}_nthru{max_n}_using_{'_'.join(gateset)}.png')
     plt.clf()
 
 def plot_error_vs_l(U, n=6, min_l=1, max_l=10, gateset=["h", "t"]):
@@ -361,7 +361,7 @@ def plot_error_vs_l(U, n=6, min_l=1, max_l=10, gateset=["h", "t"]):
     plt.xlabel('Length of Basic Approximation Sequence')
     plt.ylabel('Approximation Error')
     plt.title('Decreasing Error of Solovay-Kitaev Approximation\nas Basic Approximation Length Increases')
-    plt.savefig(f'error_plot_n{n}_l_{min_l}_thru{max_l}_using_{'_'.join(gateset)}.png')
+    plt.savefig(f'results/error_plot_n{n}_l_{min_l}_thru{max_l}_using_{'_'.join(gateset)}.png')
     plt.clf()
 
 if __name__ == "__main__":
