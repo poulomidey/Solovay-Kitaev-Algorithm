@@ -2,13 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from functools import reduce
 import scipy
+import math
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Operator
 from qiskit.circuit.library import UnitaryGate
-from qiskit.synthesis.discrete_basis.solovay_kitaev import SolovayKitaevDecomposition
 from qiskit.synthesis.discrete_basis.gate_sequence import GateSequence
 from qiskit.synthesis.discrete_basis.generate_basis_approximations import generate_basic_approximations, _1q_inverses
-from qiskit.synthesis.discrete_basis.commutator_decompose import commutator_decompose
 from qiskit.transpiler.passes.synthesis import SolovayKitaev
 
 from sk import distance
@@ -35,21 +34,19 @@ def f(U, n):
 
 ###
 
-def _recurse(basic_approximations, sequence: GateSequence, n: int, check_input: bool = True) -> GateSequence:
+def _recurse(basic_approximations, sequence: GateSequence, n: int) -> GateSequence:
     if sequence.product.shape != (3, 3):
         raise ValueError("Shape of U must be (3, 3) but is", sequence.shape)
 
     if n == 0:
         return find_basic_approximation(sequence, basic_approximations)
 
-    u_n1 = _recurse(basic_approximations, sequence, n - 1, check_input=check_input)
+    u_n1 = _recurse(basic_approximations, sequence, n - 1)
 
-    v_n, w_n = commutator_decompose(
-        sequence.dot(u_n1.adjoint()).product, check_input=check_input
-    )
+    v_n, w_n = commutator_decompose(sequence.dot(u_n1.adjoint()).product)
 
-    v_n1 = _recurse(basic_approximations, v_n, n - 1, check_input=check_input)
-    w_n1 = _recurse(basic_approximations, w_n, n - 1, check_input=check_input)
+    v_n1 = _recurse(basic_approximations, v_n, n - 1)
+    w_n1 = _recurse(basic_approximations, w_n, n - 1)
     return v_n1.dot(w_n1).dot(v_n1.adjoint()).dot(w_n1.adjoint()).dot(u_n1)
 
 def find_basic_approximation(sequence: GateSequence, basic_approximations) -> GateSequence:
@@ -60,6 +57,78 @@ def find_basic_approximation(sequence: GateSequence, basic_approximations) -> Ga
 
     best = min(basic_approximations, key=key)
     return best
+
+def _compute_rotation_axis(matrix: np.ndarray) -> np.ndarray:
+    trace = min(np.matrix.trace(matrix), 3)
+    theta = math.acos(0.5 * (trace - 1))
+    if math.sin(theta) > 1e-10:
+        return np.array([
+            1 / (2 * math.sin(theta)) * (matrix[2][1] - matrix[1][2]),
+            1 / (2 * math.sin(theta)) * (matrix[0][2] - matrix[2][0]),
+            1 / (2 * math.sin(theta)) * (matrix[1][0] - matrix[0][1])
+        ])
+    else:
+        return np.array([1.0, 0.0, 0.0])
+    
+def _solve_decomposition_angle(matrix: np.ndarray) -> float:
+    from scipy.optimize import fsolve
+
+    trace = min(np.matrix.trace(matrix), 3)
+    angle = math.acos((1 / 2) * (trace - 1))
+
+    lhs = math.sin(angle / 2)
+
+    def objective(phi):
+        sin_sq = math.sin(phi.item() / 2) ** 2
+        return 2 * sin_sq * math.sqrt(1 - sin_sq**2) - lhs
+
+    decomposition_angle = fsolve(objective, angle)[0]
+    return decomposition_angle
+
+def _cross_product_matrix(v: np.ndarray) -> np.ndarray:
+    return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+
+def _compute_rotation_from_angle_and_axis(angle: float, axis: np.ndarray) -> np.ndarray:
+    return math.cos(angle) * np.identity(3) \
+         + math.sin(angle) * _cross_product_matrix(axis) \
+         + (1 - math.cos(angle)) * np.outer(axis, axis)
+
+def _compute_commutator_so3(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    a_dagger = np.conj(a).T
+    b_dagger = np.conj(b).T
+
+    return np.dot(np.dot(np.dot(a, b), a_dagger), b_dagger)
+
+def _compute_rotation_between(from_vector: np.ndarray, to_vector: np.ndarray) -> np.ndarray:
+    from_vector = from_vector / np.linalg.norm(from_vector)
+    to_vector = to_vector / np.linalg.norm(to_vector)
+
+    dot = np.dot(from_vector, to_vector)
+    cross = _cross_product_matrix(np.cross(from_vector, to_vector))
+    rotation_matrix = np.identity(3) + cross + np.dot(cross, cross) / (1 + dot)
+    return rotation_matrix
+
+def commutator_decompose(u_so3: np.ndarray) -> tuple[GateSequence, GateSequence]:
+    angle = _solve_decomposition_angle(u_so3)
+
+    # Compute rotation about x-axis with angle 'angle'
+    vx = _compute_rotation_from_angle_and_axis(angle, np.array([1, 0, 0]))
+
+    # Compute rotation about y-axis with angle 'angle'
+    wy = _compute_rotation_from_angle_and_axis(angle, np.array([0, 1, 0]))
+
+    commutator = _compute_commutator_so3(vx, wy)
+
+    u_so3_axis = _compute_rotation_axis(u_so3)
+    commutator_axis = _compute_rotation_axis(commutator)
+
+    sim_matrix = _compute_rotation_between(commutator_axis, u_so3_axis)
+    sim_matrix_dagger = np.conj(sim_matrix).T
+
+    v = np.dot(np.dot(sim_matrix, vx), sim_matrix_dagger)
+    w = np.dot(np.dot(sim_matrix, wy), sim_matrix_dagger)
+
+    return GateSequence.from_matrix(v), GateSequence.from_matrix(w)
 
 def _remove_identities(sequence):
     index = 0
@@ -104,7 +173,7 @@ def my_g(U, n, length = 10, gateset=["h", "t", "tdg"]):
     gate_matrix_su2 = GateSequence.from_matrix((1 / np.sqrt(np.linalg.det(U))) * U)
 
     # get the decomposition as GateSequence type
-    decomposition = _recurse(cache, gate_matrix_su2, n, check_input=True)
+    decomposition = _recurse(cache, gate_matrix_su2, n)
 
     # simplify
     _remove_identities(decomposition)
