@@ -207,7 +207,7 @@ def generate_basic_approximations(basis_gates: list[str | Gate], depth: int, fil
 
         return node.children
     def _check_candidate(candidate, existing_sequences, tol=1e-10):
-        USE_KDTREE = False
+        USE_KDTREE = True
         if USE_KDTREE:
             return _check_candidate_kdtree(candidate, existing_sequences, tol)
         else:
@@ -331,7 +331,7 @@ def my_f(U, n, basic_approx_depth = 10):
     mul = reduce(np.matmul, matrices, np.matrix(np.eye(2, dtype=complex)))
     # print(f'{mul = }')
     print(f'{n = } {distance(U, mul) = }')
-    return distance(U, mul)
+    return distance(U, mul).real
 
 
 X = np.matrix(np.asarray([[0,1],[1,0]], dtype=complex))
