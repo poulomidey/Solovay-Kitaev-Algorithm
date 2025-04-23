@@ -51,23 +51,24 @@ class SolovayKitaev():
     cache = None
     basic_approximations = None
 
-    def _recurse(self, sequence: GateSequence, n: int) -> GateSequence:
+    def _sk(self, U: GateSequence, n: int) -> GateSequence:
         if n == 0:
-            return self.find_basic_approximation(sequence)
+            return self.find_basic_approximation(U)
+        else:
+            U_n_m_1 = self._sk(U, n - 1)
+            V, W = self.GC_Decompose(U.dot(U_n_m_1.adjoint()).product)
+            V_n_m_1 = self._sk(V, n - 1)
+            W_n_m_1 = self._sk(W, n - 1)
 
-        u_n1 = self._recurse(sequence, n - 1)
+            U_n = V_n_m_1.dot(W_n_m_1).dot(V_n_m_1.adjoint()).dot(W_n_m_1.adjoint()).dot(U_n_m_1)
 
-        v_n, w_n = self.commutator_decompose(sequence.dot(u_n1.adjoint()).product)
+            return U_n
 
-        v_n1 = self._recurse(v_n, n - 1)
-        w_n1 = self._recurse(w_n, n - 1)
-        return v_n1.dot(w_n1).dot(v_n1.adjoint()).dot(w_n1.adjoint()).dot(u_n1)
-
-    def find_basic_approximation(self, sequence: GateSequence) -> GateSequence:
+    def find_basic_approximation(self, U: GateSequence) -> GateSequence:
         # TODO explore using a k-d tree here
 
         def key(x):
-            return np.linalg.norm(np.subtract(x.product, sequence.product))
+            return np.linalg.norm(np.subtract(x.product, U.product))
 
         best = min(self.cache, key=key)
         return best
@@ -234,27 +235,27 @@ class SolovayKitaev():
 
         return sequences
 
-    def commutator_decompose(self, u_so3: np.ndarray) -> tuple[GateSequence, GateSequence]:
-        angle = self._solve_decomposition_angle(u_so3)
+    def GC_Decompose(self, u_so3: np.ndarray) -> tuple[GateSequence, GateSequence]:
+        phi = self._solve_decomposition_angle(u_so3)
 
         # Compute rotation about x-axis with angle 'angle'
-        vx = self._compute_rotation_from_angle_and_axis(angle, np.array([1, 0, 0]))
+        Rx = self._compute_rotation_from_angle_and_axis(phi, np.array([1, 0, 0]))
 
         # Compute rotation about y-axis with angle 'angle'
-        wy = self._compute_rotation_from_angle_and_axis(angle, np.array([0, 1, 0]))
+        Ry = self._compute_rotation_from_angle_and_axis(phi, np.array([0, 1, 0]))
 
-        commutator = self._compute_commutator_so3(vx, wy)
+        commutator = self._compute_commutator_so3(Rx, Ry)
 
         u_so3_axis = self._compute_rotation_axis(u_so3)
         commutator_axis = self._compute_rotation_axis(commutator)
 
-        sim_matrix = self._compute_rotation_between(commutator_axis, u_so3_axis)
-        sim_matrix_dagger = np.conj(sim_matrix).T
+        S = self._compute_rotation_between(commutator_axis, u_so3_axis)
+        S_dag = np.conj(S).T
 
-        v = np.dot(np.dot(sim_matrix, vx), sim_matrix_dagger)
-        w = np.dot(np.dot(sim_matrix, wy), sim_matrix_dagger)
+        V_squig = np.dot(np.dot(S, Rx), S_dag)
+        W_squig = np.dot(np.dot(S, Ry), S_dag)
 
-        return GateSequence.from_matrix(v), GateSequence.from_matrix(w)
+        return GateSequence.from_matrix(V_squig), GateSequence.from_matrix(W_squig)
 
     def _remove_identities(self, sequence):
         index = 0
@@ -295,7 +296,7 @@ class SolovayKitaev():
         gate_matrix_su2 = GateSequence.from_matrix((1 / np.sqrt(np.linalg.det(U))) * U)
 
         # get the decomposition as GateSequence type
-        decomposition = self._recurse(gate_matrix_su2, n)
+        decomposition = self._sk(gate_matrix_su2, n)
 
         # simplify
         self._remove_identities(decomposition)
@@ -318,11 +319,29 @@ def estimate_and_return_error(U, n, basic_approx_length = 10, gateset=["h", "t"]
     # print(f'{circ = }')
 
     matrices = [np.matrix(Operator(x.operation).data,dtype='complex') for x in circ.data]
+    Ln = len(matrices)
     mul = reduce(np.matmul, matrices, np.matrix(np.eye(2, dtype=complex)))
 
     print(f'{n = } l = {basic_approx_length} {distance(U, mul) = }')
 
     return distance(U, mul).real
+
+def estimate_and_return_circuit_len(U, n, basic_approx_length = 10, gateset=["h", "t"]):
+
+    # Apply my Solovay-Kitaev decomposition
+    sk = SolovayKitaev()
+    circ = sk.my_g(np.array(U, dtype='complex'), n, basic_approx_length, gateset=gateset)
+
+    # Print the resulting circuit
+    # print(f'{circ = }')
+
+    matrices = [np.matrix(Operator(x.operation).data,dtype='complex') for x in circ.data]
+    Ln = len(matrices)
+    mul = reduce(np.matmul, matrices, np.matrix(np.eye(2, dtype=complex)))
+
+    print(f'{n = } l = {basic_approx_length} {distance(U, mul) = }')
+
+    return Ln
 
 
 # Generate a single-qubit unitary which is hard to approximate,
@@ -339,10 +358,12 @@ def get_complicated_unitary_to_approximate():
     U = U@U@U@X@U@X@U@U@X@U@X@U@U@U
 
     print(f'{ U@U@U@X@U@X@U@U@X@U@X@U@U@U = }')
+    print('='*30)
 
     return U
 
 def plot_error_vs_n(U, max_n=6, l=10, gateset=["h", "t"]):
+    print(f'Gateset: {gateset}')
     N = range(1, max_n+1)
     Errors = [estimate_and_return_error(U, n, basic_approx_length=l, gateset=gateset) for n in N]
 
@@ -352,8 +373,10 @@ def plot_error_vs_n(U, max_n=6, l=10, gateset=["h", "t"]):
     plt.title('Decreasing Error of Solovay-Kitaev Approximation\nas Recursion Depth Increases')
     plt.savefig(f'results/error_plot_l{l}_nthru{max_n}_using_{'_'.join(gateset)}.png')
     plt.clf()
+    print('='*30)
 
 def plot_error_vs_l(U, n=6, min_l=1, max_l=10, gateset=["h", "t"]):
+    print(f'Gateset: {gateset}')
     L = range(min_l, max_l+1)
     Errors = [estimate_and_return_error(U, n, basic_approx_length=l, gateset=gateset) for l in L]
 
@@ -363,9 +386,29 @@ def plot_error_vs_l(U, n=6, min_l=1, max_l=10, gateset=["h", "t"]):
     plt.title('Decreasing Error of Solovay-Kitaev Approximation\nas Basic Approximation Length Increases')
     plt.savefig(f'results/error_plot_n{n}_l_{min_l}_thru{max_l}_using_{'_'.join(gateset)}.png')
     plt.clf()
+    print('='*30)
+
+def plot_cirlen_vs_n(U, max_n=6, l=10, gateset=["h", "t"]):
+    print(f'Gateset: {gateset}')
+    N = range(1, max_n+1)
+    Lengths = [estimate_and_return_circuit_len(U, n, basic_approx_length=l, gateset=gateset) for n in N]
+
+    plt.plot(N, Lengths)
+    plt.xlabel('n')
+    plt.ylabel('Circuit Length')
+    plt.title('Length of Solovay-Kitaev Discrete Gateset Circuit\nas Recursion Depth Increases')
+    plt.savefig(f'results/cirlen_plot_l{l}_nthru{max_n}_using_{'_'.join(gateset)}.png')
+    plt.clf()
+    print('='*30)
 
 if __name__ == "__main__":
     U = get_complicated_unitary_to_approximate()
     plot_error_vs_n(U, 6, 10, ["h", "t"])
     plot_error_vs_n(U, 6, 10, ["h", "t", "tdg"])
+    plot_error_vs_n(U, 6, 10, ["x", "y", "z", "h", "t", "tdg"])
+
     plot_error_vs_l(U, 4, 8, 14, ["h", "t"])
+
+    plot_cirlen_vs_n(U, 6, 10, ["h", "t"])
+    plot_cirlen_vs_n(U, 6, 10, ["h", "t", "tdg"])
+    plot_cirlen_vs_n(U, 6, 10, ["x", "y", "z", "h", "t", "tdg"])

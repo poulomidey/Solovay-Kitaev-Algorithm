@@ -278,7 +278,7 @@ def solovay_kitaev(U, n):
         return basic_approx_to_U(U) 
     else:
         U_n_m_1 = solovay_kitaev(U, n-1)
-        V, W = ai_gc_decompose(U @ U_n_m_1.H)
+        V, W = new_gc_decompose(U @ U_n_m_1.H)
         V_n_m_1 = solovay_kitaev(V, n-1)
         W_n_m_1 = solovay_kitaev(W, n-1)
         # basic approx and solovay kitaev return string of gates. 
